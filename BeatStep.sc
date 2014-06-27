@@ -17,6 +17,7 @@ BeatStep {
 	var <>selectingPage, <>currentPage;
 	var <>deviceID;
 	var <>gui;
+	var <>preset;
 
 	*new { |step=0.001, kindex=1, pindex=41|
 		if(MIDIClient.initialized) {
@@ -26,7 +27,11 @@ BeatStep {
 			BeatStep.connectMIDI;
 		};
 		if(instance.isNil) {
-			instance = super.new.init(step, kindex, pindex)
+			instance = super.new.init(step, kindex, pindex);
+		} {
+			if( instance.gui.isNil ) {
+				instance.makeGUI;
+			}
 		};
 		^instance
 	}
@@ -83,8 +88,42 @@ BeatStep {
 		this.makeGUI;
 	}
 
+	storePreset { |path|
+		var pages = ();
+		var presetString;
+		17.do{ |num|
+			pages[num] = (cc:(), pad:());
+			16.do{ |index|
+				index = index + 1;
+				pages[num].cc[index] = page[num].cc[index].currentValue;
+				pages[num].pad[index] = page[num].pad[index];
+			}
+		};
+		presetString = pages.asCompileString;
+		File.use(path, "w", { |file| file.write(presetString) });
+		"Preset saved in %".format(path).postln;
+		^presetString
+	}
+
+	loadPreset { |path|
+		"Loading preset %".format(path).postln;
+		preset = path.load;
+		this.recallPreset
+	}
+
+	recallPreset {
+		17.do{ |num|
+			16.do{ |index|
+				page[num].cc[index].set( preset[num].cc[index] );
+				page[num].pad[index] = preset[num].pad[index];
+			};
+		};
+		if( gui.notNil ) { this.recallPage };
+	}
+
 	makeGUI {
 		gui = BeatStepGui();
+		this.recallPage;
 	}
 
 	makeResponders {
@@ -105,7 +144,7 @@ BeatStep {
 			midiResponders.noteOn[index] = MIDIFunc.noteOn({ |value|
 				page[currentPage].pad[index] = 1;
 				page[currentPage].onFunc[index].value(value);
-				if( gui.notNil ) { gui.setPad(index, 0) };
+				if( gui.notNil ) { gui.setPad(index, 1) };
 			}, noteOffset+i, srcID:deviceID).permanent_(true);
 			midiResponders.noteOff[index] = MIDIFunc.noteOff({ |value|
 				page[currentPage].pad[index] = 0;
@@ -238,8 +277,8 @@ BeatStepGui {
 			};
 		};
 
-		listView = ListView(infoView, Rect(5, 5, 190, 260))
-		.font_(Font("Monaco", 12))
+		listView = ListView(infoView, Rect(5, 5, 190, 175))
+		.font_(Font("Monaco", 8))
 		.items_(
 			17.collect{ |i|
 				if( i == 0 ) {
@@ -258,44 +297,28 @@ BeatStepGui {
 			colors[i%2];
 		};
 
+		// Save, Store, Recall
+		Button(infoView, Rect(5, 185, 55, 25))
+		.font_(Font("Monaco", 12))
+		.states_([["Save"]])
+		.action_{
+			Dialog.savePanel({ |path| BeatStep.instance.storePreset(path) });
+		};
+		Button(infoView, Rect(70, 185, 55, 25))
+		.font_(Font("Monaco", 12))
+		.states_([["Load"]])
+		.action_{
+			Dialog.openPanel({ |path| BeatStep.instance.loadPreset(path) });
+		};
+		Button(infoView, Rect(135, 185, 55, 25))
+		.font_(Font("Monaco", 12))
+		.states_([["Recall"]])
+		.action_{
+			BeatStep.instance.recallPreset
+		};
+
 		window.onClose_({ BeatStep.instance.gui = nil });
 
 
 	}
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
